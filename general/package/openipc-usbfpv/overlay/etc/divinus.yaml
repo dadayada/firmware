@@ -4,6 +4,12 @@
 # port 8554, and the OSD is off because the flight-controller OSD is drawn on
 # the ground from the MSP that S99msposd forwards. system.sensor_config is
 # rewritten at boot by S95divinus from the U-Boot `sensor` variable.
+#
+# The disabled channels keep the SAME geometry as the H.264 channel on
+# purpose: divinus sizes its sensor request from the largest width, height
+# and fps across mp4 and mjpeg whether the channel is enabled or not
+# (src/media.c), so an idle mjpeg block left at upstream's 3840x2160 put the
+# IMX415 into a 4K mode and capped the sensor stream at 20fps (2026-09-28).
 system:
   sensor_config: /etc/sensors/imx415.bin
   web_port: 80
@@ -103,7 +109,7 @@ jpeg:
 mjpeg:
   enable: false
   mode: CBR
-  width: 3840
-  height: 2160
-  fps: 20
+  width: 1920
+  height: 1080
+  fps: 30
   bitrate: 1024
