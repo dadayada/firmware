@@ -41,8 +41,16 @@ FFMPEG_OPENIPC_CONF_OPTS = \
 # options in order, so these re-enable exactly what the raw-UVC transcode
 # path needs and nothing else. buffer/buffersink are filters too, and the
 # ffmpeg program cannot build a graph without them.
+#
+# v4l2-m2m is back on for one reason: configure probes linux/videodev2.h
+# only inside `if enabled v4l2_m2m`, and the V4L2 indev and outdev depend on
+# that probe having passed. With it disabled both devices drop out without
+# a word -- CONFIG_V4L2_INDEV 0 in config.h, "Unrecognized option
+# 'input_format'" on the camera. No m2m codec is enabled, so nothing else
+# is built.
 ifeq ($(BR2_PACKAGE_FFMPEG_OPENIPC_V4L2_MJPEG),y)
 FFMPEG_OPENIPC_CONF_OPTS += \
+	--enable-v4l2-m2m \
 	--enable-avdevice --enable-indev=v4l2 --enable-outdev=v4l2 \
 	--enable-swscale --enable-filter=scale,format,null,buffer,buffersink \
 	--enable-decoder=rawvideo --enable-encoder=mjpeg \
