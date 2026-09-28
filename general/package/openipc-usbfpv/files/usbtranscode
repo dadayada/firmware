@@ -28,12 +28,21 @@ while :; do
 		# nobuffer/low_delay: ffmpeg otherwise queues input to probe it and
 		# smooth timing, a frame or more of latency for nothing on a live
 		# source whose format is already known.
+		# RTP/JPEG (RFC 2435) carries no Huffman tables and expects the
+		# standard ones, which -huffman default guarantees; and it carries
+		# the quantisation tables in-band as a luma+chroma pair. ffmpeg
+		# writes only one when both are equal, and a receiver that takes
+		# the pair literally then decodes chroma with garbage: that was the
+		# scrambled picture on the first working stream. 4:2:0 because it
+		# is RTP/JPEG type 1, the one every receiver handles, and the
+		# thermal image has no chroma detail to lose.
 		ffmpeg -nostdin -hide_banner -loglevel warning \
 			-fflags nobuffer -flags low_delay \
 			-f v4l2 -input_format "$USB_INPUT_FORMAT" \
 			-video_size "${USB_WIDTH}x${USB_HEIGHT}" -framerate "$USB_FPS" \
 			-i "$USB_SOURCE" \
-			-c:v mjpeg -q:v "$USB_JPEG_QUALITY" -huffman default -pix_fmt yuvj422p \
+			-c:v mjpeg -q:v "$USB_JPEG_QUALITY" -huffman default \
+			-force_duplicated_matrix 1 -pix_fmt yuvj420p \
 			$USBTRANSCODE_EXTRA \
 			-f v4l2 "$USB_SINK" >"$LOG" 2>&1 &
 		ffmpeg_pid=$!

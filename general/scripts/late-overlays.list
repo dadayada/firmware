@@ -5,3 +5,9 @@ BR2_PACKAGE_OPENIPC_NFS_ROOT:package/openipc-nfs-root/overlay
 # overlay so a majestic-free image carries no license for software it does
 # not have -- both gates key on the files' presence.
 BR2_PACKAGE_MAJESTIC:package/majestic/overlay
+# The USB FPV profile's configs for divinus and v4l2rtspserver. Both of those
+# packages install a default at the same /etc path, and the per-package target
+# tree is assembled in ALPHABETICAL package order, not dependency order -- so
+# v4l2rtspserver's default overwrote the profile's copy on the first image.
+# A late overlay lands after every package and settles it.
+BR2_PACKAGE_OPENIPC_USBFPV:package/openipc-usbfpv/overlay
