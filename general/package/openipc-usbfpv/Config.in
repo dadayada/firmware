@@ -1,17 +1,28 @@
 config BR2_PACKAGE_OPENIPC_USBFPV
 	bool "OpenIPC USB FPV profile"
 	depends on !BR2_PACKAGE_MAJESTIC
+	depends on BR2_LINUX_KERNEL
 	select BR2_PACKAGE_DIVINUS
 	select BR2_PACKAGE_MSPOSD
 	select BR2_PACKAGE_V4L2RTSPSERVER
+	select BR2_PACKAGE_V4L2LOOPBACK_OPENIPC
+	select BR2_PACKAGE_FFMPEG_OPENIPC
+	select BR2_PACKAGE_FFMPEG_OPENIPC_V4L2_MJPEG
 	select BR2_PACKAGE_YAML_CLI
 	help
-	  Init scripts and configuration that turn the three packages
-	  it selects into one firmware: Divinus serves the sensor as
-	  H.264 over RTSP on port 554, v4l2rtspserver serves a UVC
-	  camera's MJPEG over RTSP on port 8554, and msposd forwards
-	  the flight controller's MSP DisplayPort stream from UART2 to
-	  a ground station over UDP, where the OSD is drawn.
+	  Init scripts and configuration that turn the packages it
+	  selects into one firmware: Divinus serves the sensor as H.264
+	  over RTSP on port 554; a UVC camera is served as MJPEG over
+	  RTSP on port 8554; msposd forwards the flight controller's MSP
+	  DisplayPort stream from UART2 to a ground station over UDP,
+	  where the OSD is drawn.
+
+	  The USB path has a CPU transcode in it because the camera this
+	  was built for, an InfiRay 384x288 thermal core, offers only raw
+	  YUYV: ffmpeg JPEG-encodes it into a v4l2loopback node and
+	  v4l2rtspserver serves that. A camera that offers MJPEG itself
+	  can skip the transcode by pointing /etc/v4l2rtspserver.conf at
+	  it directly and disabling S93usbtranscode.
 
 	  Board-specific by design, the way openipc-nfs-root is: the
 	  files it installs would start a second streamer on any image

@@ -1,0 +1,18 @@
+config BR2_PACKAGE_V4L2LOOPBACK_OPENIPC
+	bool "v4l2loopback-openipc"
+	depends on BR2_LINUX_KERNEL
+	help
+	  Kernel module that creates virtual V4L2 devices: one program
+	  writes frames in, any V4L2 reader sees a camera. The seam
+	  between a CPU transcoder and v4l2rtspserver when the real USB
+	  camera offers no format the network can carry.
+
+	  A fork of buildroot's own package, minus its kernel config
+	  fixups: those force CONFIG_MEDIA_SUPPORT and CONFIG_VIDEO_DEV
+	  to =y, and on ssc338q that puts the kernel over its 2048KB
+	  partition. This tree's board configs carry them as =m.
+
+	  Load with: modprobe v4l2loopback devices=1 video_nr=10
+	  card_label=<name> exclusive_caps=1
+
+	  https://github.com/umlaeute/v4l2loopback

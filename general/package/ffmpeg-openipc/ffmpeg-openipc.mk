@@ -37,6 +37,21 @@ FFMPEG_OPENIPC_CONF_OPTS = \
 	--disable-programs --enable-ffmpeg --enable-small
 
 
+# Appended after the --disable-* lines above, and ffmpeg's configure applies
+# options in order, so these re-enable exactly what the raw-UVC transcode
+# path needs and nothing else. buffer/buffersink are filters too, and the
+# ffmpeg program cannot build a graph without them.
+ifeq ($(BR2_PACKAGE_FFMPEG_OPENIPC_V4L2_MJPEG),y)
+FFMPEG_OPENIPC_CONF_OPTS += \
+	--enable-avdevice --enable-indev=v4l2 --enable-outdev=v4l2 \
+	--enable-swscale --enable-filter=scale,format,null,buffer,buffersink \
+	--enable-decoder=rawvideo --enable-encoder=mjpeg \
+	--enable-demuxer=rawvideo --enable-muxer=rawvideo
+ifeq ($(BR2_arm),y)
+FFMPEG_OPENIPC_CONF_OPTS += --enable-asm
+endif
+endif
+
 FFMPEG_OPENIPC_DEPENDENCIES += host-pkgconf
 
 # Default to --cpu=generic for MIPS architecture, in order to avoid a

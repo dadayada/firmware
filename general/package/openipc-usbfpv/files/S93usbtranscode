@@ -1,0 +1,44 @@
+#!/bin/sh
+
+DAEMON="usbtranscode"
+DAEMON_PATH="/usr/sbin/$DAEMON"
+
+start() {
+	echo -n "Starting $DAEMON: "
+	# Both modules are in /etc/modules already; this covers a hand-edited
+	# list and costs nothing when they are loaded.
+	modprobe uvcvideo 2>/dev/null
+	modprobe v4l2loopback devices=1 video_nr=10 card_label=usb-mjpeg exclusive_caps=1 2>/dev/null
+	start-stop-daemon -b -S -q -x "$DAEMON_PATH"
+	case $? in
+		0) echo "OK" ;;
+		1) echo "OK (already running)" ;;
+		*) echo "FAIL"; return 1 ;;
+	esac
+}
+
+stop() {
+	echo -n "Stopping $DAEMON: "
+	# The supervisor first, so it does not restart the encoder it is about
+	# to lose; then the encoder itself.
+	start-stop-daemon -K -q -x "$DAEMON_PATH"
+	start-stop-daemon -K -q -x /usr/bin/ffmpeg
+	echo "OK"
+}
+
+case "$1" in
+	start|stop)
+		$1
+		;;
+
+	restart)
+		stop
+		sleep 1
+		start
+		;;
+
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+esac

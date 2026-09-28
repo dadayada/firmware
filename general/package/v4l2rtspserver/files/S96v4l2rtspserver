@@ -14,12 +14,22 @@ RTSP_PATH=usb
 V4L2RTSPSERVER_EXTRA=""
 [ -r "$CONFIG" ] && . "$CONFIG"
 
-DAEMON_ARGS="-f$V4L2_FORMAT -W $V4L2_WIDTH -H $V4L2_HEIGHT -F $V4L2_FPS -P $RTSP_PORT -u $RTSP_PATH $V4L2RTSPSERVER_EXTRA $V4L2_DEVICE"
+COMMON_ARGS="-F $V4L2_FPS -P $RTSP_PORT -u $RTSP_PATH $V4L2RTSPSERVER_EXTRA $V4L2_DEVICE"
 
 # Found by executable, not pidfile, for the reason S95majestic gives: a stale
 # pidfile makes start-stop-daemon blind to the live process.
 running() {
 	start-stop-daemon -t -K -q -x "$DAEMON_PATH"
+}
+
+# The daemon exits at once when the camera refuses the format it was given,
+# and start-stop-daemon -b cannot see that. So: start, give it a moment, and
+# look for it. A wrong size is not a failure -- the V4L2 layer warns and takes
+# the nearest mode the camera offers -- only a wrong pixel format is.
+try_start() {
+	start-stop-daemon -b -S -q -x "$DAEMON_PATH" -- "$@" $COMMON_ARGS
+	sleep 2
+	running
 }
 
 start() {
@@ -41,12 +51,27 @@ start() {
 		echo "SKIP ($V4L2_DEVICE not present)"
 		return 0
 	fi
-	start-stop-daemon -b -S -q -x "$DAEMON_PATH" -- $DAEMON_ARGS
-	case $? in
-		0) echo "OK" ;;
-		1) echo "OK (already running)" ;;
-		*) echo "FAIL"; return 1 ;;
-	esac
+	if running; then
+		echo "OK (already running)"
+		return 0
+	fi
+	# Three tries, most specific first. The configured format at the
+	# configured size; then that format at whatever size the camera has,
+	# which covers a config written for a different camera; then the
+	# daemon's own preference list (HEVC, H264, MJPEG, JPEG, NV12), which is
+	# what a camera nobody configured for gets. A camera that offers only
+	# YUYV fails all three, and that is correct: nothing here can carry raw
+	# YUYV over the link, and re-encoding it is not this daemon's job.
+	if try_start "-f$V4L2_FORMAT" -W "$V4L2_WIDTH" -H "$V4L2_HEIGHT"; then
+		echo "OK ($V4L2_FORMAT ${V4L2_WIDTH}x${V4L2_HEIGHT})"
+	elif try_start "-f$V4L2_FORMAT"; then
+		echo "OK ($V4L2_FORMAT, camera's own size)"
+	elif try_start; then
+		echo "OK (format chosen by daemon)"
+	else
+		echo "FAIL (no format the camera offers can be served; run: $DAEMON -vv -fMJPG $V4L2_DEVICE)"
+		return 1
+	fi
 }
 
 stop() {

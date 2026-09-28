@@ -6,3 +6,18 @@ config BR2_PACKAGE_FFMPEG_OPENIPC
 	  convert and stream audio and video.
 
 	  http://www.ffmpeg.org
+
+if BR2_PACKAGE_FFMPEG_OPENIPC
+
+config BR2_PACKAGE_FFMPEG_OPENIPC_V4L2_MJPEG
+	bool "V4L2 capture and MJPEG encode"
+	help
+	  Adds the V4L2 input and output devices, the rawvideo decoder,
+	  the MJPEG encoder and the scale/format filters, so ffmpeg can
+	  read a raw (YUYV) UVC camera, JPEG-encode it on the CPU and
+	  write the result to a v4l2loopback node for v4l2rtspserver to
+	  serve. Everything else stays disabled. On ARM this also turns
+	  the assembler optimisations back on, since the encode runs on
+	  the camera's CPU.
+
+endif

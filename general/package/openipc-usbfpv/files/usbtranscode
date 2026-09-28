@@ -1,0 +1,46 @@
+#!/bin/sh
+#
+# Keeps ffmpeg running for as long as the USB camera is present, and keeps
+# v4l2rtspserver in step with it. ffmpeg exits when the camera is unplugged,
+# and v4l2rtspserver, left running against the loopback node, would serve a
+# frozen frame -- so it is stopped with the encoder and started again with
+# it. Started in the background by S93usbtranscode; runs until killed.
+
+CONFIG="/etc/usbtranscode.conf"
+LOG="/tmp/usbtranscode.log"
+
+USB_SOURCE=/dev/video0
+USB_INPUT_FORMAT=yuyv422
+USB_WIDTH=384
+USB_HEIGHT=288
+USB_FPS=25
+USB_JPEG_QUALITY=5
+USB_SINK=/dev/video10
+USBTRANSCODE_EXTRA=""
+[ -r "$CONFIG" ] && . "$CONFIG"
+
+RTSP_INIT="/etc/init.d/S96v4l2rtspserver"
+
+while :; do
+	if [ -c "$USB_SOURCE" ] && [ -c "$USB_SINK" ]; then
+		# -huffman default: the optimal-table pass costs a second walk over
+		# every frame for a few percent of size; not worth it on this CPU.
+		ffmpeg -nostdin -hide_banner -loglevel warning \
+			-f v4l2 -input_format "$USB_INPUT_FORMAT" \
+			-video_size "${USB_WIDTH}x${USB_HEIGHT}" -framerate "$USB_FPS" \
+			-i "$USB_SOURCE" \
+			-c:v mjpeg -q:v "$USB_JPEG_QUALITY" -huffman default -pix_fmt yuvj422p \
+			$USBTRANSCODE_EXTRA \
+			-f v4l2 "$USB_SINK" >"$LOG" 2>&1 &
+		ffmpeg_pid=$!
+		sleep 2
+		if kill -0 "$ffmpeg_pid" 2>/dev/null; then
+			"$RTSP_INIT" start >/dev/null 2>&1
+			wait "$ffmpeg_pid"
+			"$RTSP_INIT" stop >/dev/null 2>&1
+		else
+			wait "$ffmpeg_pid"
+		fi
+	fi
+	sleep 3
+done
