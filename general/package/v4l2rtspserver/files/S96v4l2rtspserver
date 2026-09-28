@@ -24,6 +24,10 @@ running() {
 
 start() {
 	echo -n "Starting $DAEMON: "
+	# UVC is a module, not built in: built in, it put the kernel over its
+	# 2048KB partition on ssc338q. A kernel without the module (any board
+	# that did not enable it) makes this a no-op and the wait below decides.
+	modprobe uvcvideo 2>/dev/null
 	# USB enumeration is not ordered against rcS. A camera plugged in at
 	# power-on is usually there by now, but "usually" is a boot race, so give
 	# it a moment before deciding it is absent. Absent is not an error: the
