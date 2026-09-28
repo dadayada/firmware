@@ -25,10 +25,15 @@ USBTRANSCODE_EXTRA=""
 
 RTSP_INIT="/etc/init.d/S96v4l2rtspserver"
 
-# taskset wants a hex mask; nice takes the increment as given.
+# busybox here has nice but no taskset. usbmjpeg pins itself (-c); the
+# ffmpeg fallback is pinned only if a taskset happens to exist.
 wrap=""
-[ -n "$USB_ENCODER_CPU" ] && wrap="taskset $(printf '%x' $((1 << USB_ENCODER_CPU)))"
-[ -n "$USB_ENCODER_NICE" ] && wrap="$wrap nice -n $USB_ENCODER_NICE"
+[ -n "$USB_ENCODER_NICE" ] && wrap="nice -n $USB_ENCODER_NICE"
+pin=""
+[ -n "$USB_ENCODER_CPU" ] && pin="-c $USB_ENCODER_CPU"
+ffpin=""
+[ -n "$USB_ENCODER_CPU" ] && command -v taskset >/dev/null 2>&1 &&
+	ffpin="taskset $(printf '%x' $((1 << USB_ENCODER_CPU)))"
 
 run_encoder() {
 	case "$USB_ENCODER" in
@@ -39,7 +44,7 @@ run_encoder() {
 			# ffmpeg writes one when both are equal, which a receiver
 			# taking the pair literally decodes as garbage. nobuffer and
 			# low_delay: no probe or timing queue on a live source.
-			$wrap ffmpeg -nostdin -hide_banner -loglevel warning \
+			$ffpin $wrap ffmpeg -nostdin -hide_banner -loglevel warning \
 				-fflags nobuffer -flags low_delay \
 				-f v4l2 -input_format yuyv422 \
 				-video_size "${USB_WIDTH}x${USB_HEIGHT}" -framerate "$USB_FPS" \
@@ -52,7 +57,7 @@ run_encoder() {
 		*)
 			$wrap usbmjpeg -i "$USB_SOURCE" -o "$USB_SINK" \
 				-W "$USB_WIDTH" -H "$USB_HEIGHT" -F "$USB_FPS" \
-				-q "$USB_JPEG_QUALITY" $USBTRANSCODE_EXTRA
+				-q "$USB_JPEG_QUALITY" $pin $USBTRANSCODE_EXTRA
 			;;
 	esac
 }

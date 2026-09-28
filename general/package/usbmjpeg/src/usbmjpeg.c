@@ -17,9 +17,11 @@
  * tables in every frame. Quality 1-100 is libjpeg's scale.
  */
 
+#define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <sched.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -281,16 +283,17 @@ static void usage(void)
 {
 	fprintf(stderr,
 		"usage: usbmjpeg [-i capture] [-o loopback] [-W width] [-H height]\n"
-		"                [-F fps] [-q quality] [-v]\n"
+		"                [-F fps] [-q quality] [-c cpu] [-v]\n"
 		"       usbmjpeg -t in.yuyv out.jpg [-W width] [-H height] [-q quality]\n"
-		"defaults: -i /dev/video0 -o /dev/video10 -W 384 -H 288 -F 25 -q 80\n");
+		"defaults: -i /dev/video0 -o /dev/video10 -W 384 -H 288 -F 25 -q 80\n"
+		"-c pins the process to one CPU (the image has no taskset)\n");
 }
 
 int main(int argc, char **argv)
 {
 	const char *capture = "/dev/video0", *sink = "/dev/video10";
 	const char *test_in = NULL, *test_out = NULL;
-	int width = 384, height = 288, fps = 25, quality = 80, verbose = 0;
+	int width = 384, height = 288, fps = 25, quality = 80, verbose = 0, cpu = -1;
 	struct v4l2_buffer bufs[NBUF];
 	void *maps[NBUF];
 	size_t lens[NBUF];
@@ -301,9 +304,10 @@ int main(int argc, char **argv)
 	unsigned long bytes = 0;
 	double t_stat, enc_ms = 0;
 
-	while ((opt = getopt(argc, argv, "i:o:W:H:F:q:t:vh")) != -1) {
+	while ((opt = getopt(argc, argv, "i:o:W:H:F:q:c:t:vh")) != -1) {
 		switch (opt) {
 		case 'i': capture = optarg; break;
+		case 'c': cpu = atoi(optarg); break;
 		case 'o': sink = optarg; break;
 		case 'W': width = atoi(optarg); break;
 		case 'H': height = atoi(optarg); break;
@@ -334,6 +338,18 @@ int main(int argc, char **argv)
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
 	signal(SIGPIPE, SIG_IGN);
+
+	/* Pinning done here because busybox on the image has no taskset. The
+	 * sensor pipeline's threads sit on core 0; an encoder sharing it cost
+	 * the main stream frames, and core 1 is otherwise idle. */
+	if (cpu >= 0) {
+		cpu_set_t set;
+
+		CPU_ZERO(&set);
+		CPU_SET(cpu, &set);
+		if (sched_setaffinity(0, sizeof(set), &set) < 0)
+			fprintf(stderr, "usbmjpeg: cannot pin to cpu %d: %s\n", cpu, strerror(errno));
+	}
 
 	encoder_init(&e, width, height, quality);
 	cfd = open_capture(capture, width, height, fps, bufs, maps, lens);
