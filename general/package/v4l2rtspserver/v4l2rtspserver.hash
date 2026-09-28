@@ -1,0 +1,6 @@
+# Locally generated, from a fresh fetch of each URL the .mk names.
+sha256  eb9010b2f87d132aa18af16bb959079c0c4beaf01006a98a2cb05b8ecdab6c34  v4l2rtspserver-fafc8cbd1c93bf0f7453efa8b7718c68941fd5eb.tar.gz
+sha256  780bf6f99192670eb31dbb045e2f95912ac33abfe6e0b997acd95d95d48996d9  libv4l2cpp-4c90adc628719c89e48fbca75b53c13c96d8065b.tar.gz
+# live555: matches buildroot's package/live555/live555.hash for the same tarball.
+sha256  44eb6ae4ae02ef68a5028d9fc8b70c45b9ba45c058f846b68bc4d32c74355f49  live.2025.10.13.tar.gz
+sha256  6b0382b16279f26ff69014300541967a356a666eb0b91b422f6862f6b7dad17e  Unlicense.txt

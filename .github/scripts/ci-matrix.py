@@ -135,6 +135,7 @@ UNBUILT_BOARDS = {
     "gk7205v200_original": "variant 'original', not a standard matrix variant",
     "hi3516ev300_dev": "variant 'dev', not a standard matrix variant",
     "hi3516ev300_glibc": "variant 'glibc', not a standard matrix variant",
+    "ssc338q_usbfpv": "variant 'usbfpv', not a standard matrix variant",
     "t31glibc_lite": "glibc toolchain variant of t31_lite",
 
     # Not firmware images at all: no BR2_OPENIPC_VARIANT, so nothing the repack
@@ -282,10 +283,11 @@ NOT_BUILT = {
     "linux-patcher", "matter",
     "mavfwd", "mdnsd-openipc", "mini", "mqtt-bot", "msposd", "n3n-openipc", "nabto",
     "netblink", "node-exporter", "ntfy", "onvif-simple-server", "openipc-nfs-root",
+    "openipc-usbfpv",
     "osd-openipc", "rtl8188eus-openipc", "rtl8192eu-openipc", "rtl8811cu-openipc",
     "rtl8812au", "rtl8812au-openipc", "rtl88x2eu-openipc", "rtw-hostapd", "rubyfpv",
     "siproxd-openipc", "ssv615x-openipc", "ssv635x-openipc", "txw8301-openipc",
-    "uqmi-openipc", "usb-dual-role", "vdec-openipc", "venc-openipc",
+    "uqmi-openipc", "usb-dual-role", "v4l2rtspserver", "vdec-openipc", "venc-openipc",
     "w1-ds18b20", "waybeam", "wpa_supplicant-openipc",
     "webface",
     "webrtc-audio-processing-openipc", "wifibroadcast-ng", "wq9001", "yaml-cli-multi",

@@ -1,0 +1,77 @@
+#!/bin/sh
+
+DAEMON="v4l2rtspserver"
+DAEMON_PATH="/usr/bin/$DAEMON"
+CONFIG="/etc/v4l2rtspserver.conf"
+
+V4L2_DEVICE=/dev/video0
+V4L2_FORMAT=MJPG
+V4L2_WIDTH=1280
+V4L2_HEIGHT=720
+V4L2_FPS=30
+RTSP_PORT=8554
+RTSP_PATH=usb
+V4L2RTSPSERVER_EXTRA=""
+[ -r "$CONFIG" ] && . "$CONFIG"
+
+DAEMON_ARGS="-f$V4L2_FORMAT -W $V4L2_WIDTH -H $V4L2_HEIGHT -F $V4L2_FPS -P $RTSP_PORT -u $RTSP_PATH $V4L2RTSPSERVER_EXTRA $V4L2_DEVICE"
+
+# Found by executable, not pidfile, for the reason S95majestic gives: a stale
+# pidfile makes start-stop-daemon blind to the live process.
+running() {
+	start-stop-daemon -t -K -q -x "$DAEMON_PATH"
+}
+
+start() {
+	echo -n "Starting $DAEMON: "
+	# USB enumeration is not ordered against rcS. A camera plugged in at
+	# power-on is usually there by now, but "usually" is a boot race, so give
+	# it a moment before deciding it is absent. Absent is not an error: the
+	# board is a working camera without its second source.
+	i=0
+	while [ ! -c "$V4L2_DEVICE" ] && [ $i -lt 10 ]; do
+		i=$((i + 1))
+		sleep 1
+	done
+	if [ ! -c "$V4L2_DEVICE" ]; then
+		echo "SKIP ($V4L2_DEVICE not present)"
+		return 0
+	fi
+	start-stop-daemon -b -S -q -x "$DAEMON_PATH" -- $DAEMON_ARGS
+	case $? in
+		0) echo "OK" ;;
+		1) echo "OK (already running)" ;;
+		*) echo "FAIL"; return 1 ;;
+	esac
+}
+
+stop() {
+	echo -n "Stopping $DAEMON: "
+	start-stop-daemon -K -q -x "$DAEMON_PATH"
+	i=0
+	while running && [ $i -lt 10 ]; do
+		i=$((i + 1))
+		sleep 1
+	done
+	if running; then
+		echo "FAIL"
+		return 1
+	fi
+	echo "OK"
+}
+
+case "$1" in
+	start|stop)
+		$1
+		;;
+
+	restart)
+		stop || exit 1
+		start
+		;;
+
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+esac

@@ -1,0 +1,66 @@
+#!/bin/sh
+
+DAEMON="divinus"
+DAEMON_PATH="/usr/bin/$DAEMON"
+CONFIG="/etc/divinus.yaml"
+
+running() {
+	start-stop-daemon -t -K -q -x "$DAEMON_PATH"
+}
+
+# Divinus needs the ISP tuning file for the sensor on the board, and the
+# shipped divinus.yaml names one sensor because it has to name something.
+# load_sigmastar has already detected the sensor and stored it in U-Boot's
+# `sensor` variable by the time S70vendor is done, so point the config at
+# that sensor's file when the SDK package shipped it. /etc is on the writable
+# overlay, so this sticks; it is a no-op once it matches.
+set_sensor_config() {
+	sensor=$(fw_printenv -n sensor 2>/dev/null)
+	[ -n "$sensor" ] || return 0
+	[ -f "/etc/sensors/$sensor.bin" ] || return 0
+	grep -q "sensor_config: /etc/sensors/$sensor.bin" "$CONFIG" && return 0
+	cli -i "$CONFIG" -s .system.sensor_config "/etc/sensors/$sensor.bin"
+}
+
+start() {
+	echo -n "Starting $DAEMON: "
+	set_sensor_config
+	start-stop-daemon -b -S -q -x "$DAEMON_PATH"
+	case $? in
+		0) echo "OK" ;;
+		1) echo "OK (already running)" ;;
+		*) echo "FAIL"; return 1 ;;
+	esac
+}
+
+stop() {
+	echo -n "Stopping $DAEMON: "
+	start-stop-daemon -K -q -x "$DAEMON_PATH"
+	i=0
+	while running && [ $i -lt 10 ]; do
+		i=$((i + 1))
+		sleep 1
+	done
+	if running; then
+		echo "FAIL"
+		return 1
+	fi
+	echo "OK"
+}
+
+case "$1" in
+	start|stop)
+		$1
+		;;
+
+	restart)
+		stop || exit 1
+		sleep 1
+		start
+		;;
+
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+esac

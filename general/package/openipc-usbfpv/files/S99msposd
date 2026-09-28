@@ -1,0 +1,65 @@
+#!/bin/sh
+
+DAEMON="msposd"
+DAEMON_PATH="/usr/bin/$DAEMON"
+CONFIG="/etc/msposd.conf"
+
+MSPOSD_UART=/dev/ttyS2
+MSPOSD_BAUD=115200
+MSPOSD_OUT=192.168.99.2:14550
+MSPOSD_EXTRA=""
+[ -r "$CONFIG" ] && . "$CONFIG"
+
+# Forwarder only: no --osd, so nothing is drawn on the camera. The ground
+# station renders the OSD from this UDP stream over whichever video it shows,
+# which is the only way the USB camera's stream can carry an OSD at all.
+DAEMON_ARGS="--master $MSPOSD_UART --baudrate $MSPOSD_BAUD --out $MSPOSD_OUT $MSPOSD_EXTRA"
+
+running() {
+	start-stop-daemon -t -K -q -x "$DAEMON_PATH"
+}
+
+start() {
+	echo -n "Starting $DAEMON: "
+	if [ ! -c "$MSPOSD_UART" ]; then
+		echo "FAIL ($MSPOSD_UART not present)"
+		return 1
+	fi
+	start-stop-daemon -b -S -q -x "$DAEMON_PATH" -- $DAEMON_ARGS
+	case $? in
+		0) echo "OK" ;;
+		1) echo "OK (already running)" ;;
+		*) echo "FAIL"; return 1 ;;
+	esac
+}
+
+stop() {
+	echo -n "Stopping $DAEMON: "
+	start-stop-daemon -K -q -x "$DAEMON_PATH"
+	i=0
+	while running && [ $i -lt 10 ]; do
+		i=$((i + 1))
+		sleep 1
+	done
+	if running; then
+		echo "FAIL"
+		return 1
+	fi
+	echo "OK"
+}
+
+case "$1" in
+	start|stop)
+		$1
+		;;
+
+	restart)
+		stop || exit 1
+		start
+		;;
+
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+esac

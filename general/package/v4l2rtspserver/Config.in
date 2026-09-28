@@ -1,0 +1,17 @@
+config BR2_PACKAGE_V4L2RTSPSERVER
+	bool "v4l2rtspserver"
+	depends on BR2_INSTALL_LIBSTDCPP
+	help
+	  RTSP server for a V4L2 capture device, built on live555.
+	  Streams whatever the device already produces (MJPEG, H.264)
+	  without transcoding, which is what makes it fit next to a
+	  SoC streamer that owns the ISP: a UVC webcam gets its own RTSP
+	  URL on its own port, and no CPU is spent re-encoding it.
+
+	  Started by /etc/init.d/S96v4l2rtspserver, configured through
+	  /etc/v4l2rtspserver.conf.
+
+	  https://github.com/mpromonet/v4l2rtspserver
+
+comment "v4l2rtspserver needs a toolchain w/ C++"
+	depends on !BR2_INSTALL_LIBSTDCPP
