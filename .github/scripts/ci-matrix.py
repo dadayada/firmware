@@ -287,7 +287,7 @@ NOT_BUILT = {
     "osd-openipc", "rtl8188eus-openipc", "rtl8192eu-openipc", "rtl8811cu-openipc",
     "rtl8812au", "rtl8812au-openipc", "rtl88x2eu-openipc", "rtw-hostapd", "rubyfpv",
     "siproxd-openipc", "ssv615x-openipc", "ssv635x-openipc", "txw8301-openipc",
-    "uqmi-openipc", "usb-dual-role", "v4l2loopback-openipc", "v4l2rtspserver",
+    "uqmi-openipc", "usb-dual-role", "usbmjpeg", "v4l2loopback-openipc", "v4l2rtspserver",
     "vdec-openipc", "venc-openipc",
     "w1-ds18b20", "waybeam", "wpa_supplicant-openipc",
     "webface",

@@ -1,58 +1,73 @@
 #!/bin/sh
 #
-# Keeps ffmpeg running for as long as the USB camera is present, and keeps
-# v4l2rtspserver in step with it. ffmpeg exits when the camera is unplugged,
-# and v4l2rtspserver, left running against the loopback node, would serve a
-# frozen frame -- so it is stopped with the encoder and started again with
-# it. Started in the background by S93usbtranscode; runs until killed.
+# Keeps the USB encoder running for as long as the USB camera is present,
+# and keeps v4l2rtspserver in step with it. The encoder exits when the
+# camera is unplugged, and v4l2rtspserver, left running against the
+# loopback node, would serve a frozen frame -- so it is stopped with the
+# encoder and started again with it. Started in the background by
+# S93usbtranscode; runs until killed.
 
 CONFIG="/etc/usbtranscode.conf"
 LOG="/tmp/usbtranscode.log"
 
 USB_SOURCE=/dev/video0
-USB_INPUT_FORMAT=yuyv422
 USB_WIDTH=384
 USB_HEIGHT=288
 USB_FPS=25
-USB_JPEG_QUALITY=5
+USB_ENCODER=usbmjpeg
+USB_ENCODER_CPU=1
+USB_ENCODER_NICE=5
+USB_JPEG_QUALITY=80
+USB_FFMPEG_QSCALE=5
 USB_SINK=/dev/video10
 USBTRANSCODE_EXTRA=""
 [ -r "$CONFIG" ] && . "$CONFIG"
 
 RTSP_INIT="/etc/init.d/S96v4l2rtspserver"
 
+# taskset wants a hex mask; nice takes the increment as given.
+wrap=""
+[ -n "$USB_ENCODER_CPU" ] && wrap="taskset $(printf '%x' $((1 << USB_ENCODER_CPU)))"
+[ -n "$USB_ENCODER_NICE" ] && wrap="$wrap nice -n $USB_ENCODER_NICE"
+
+run_encoder() {
+	case "$USB_ENCODER" in
+		ffmpeg)
+			# -huffman default: RTP/JPEG carries no Huffman tables and
+			# expects the standard ones. -force_duplicated_matrix: it
+			# carries the quantisation tables as a luma+chroma pair, and
+			# ffmpeg writes one when both are equal, which a receiver
+			# taking the pair literally decodes as garbage. nobuffer and
+			# low_delay: no probe or timing queue on a live source.
+			$wrap ffmpeg -nostdin -hide_banner -loglevel warning \
+				-fflags nobuffer -flags low_delay \
+				-f v4l2 -input_format yuyv422 \
+				-video_size "${USB_WIDTH}x${USB_HEIGHT}" -framerate "$USB_FPS" \
+				-i "$USB_SOURCE" \
+				-c:v mjpeg -q:v "$USB_FFMPEG_QSCALE" -huffman default \
+				-force_duplicated_matrix 1 -pix_fmt yuvj420p \
+				$USBTRANSCODE_EXTRA \
+				-f v4l2 "$USB_SINK"
+			;;
+		*)
+			$wrap usbmjpeg -i "$USB_SOURCE" -o "$USB_SINK" \
+				-W "$USB_WIDTH" -H "$USB_HEIGHT" -F "$USB_FPS" \
+				-q "$USB_JPEG_QUALITY" $USBTRANSCODE_EXTRA
+			;;
+	esac
+}
+
 while :; do
 	if [ -c "$USB_SOURCE" ] && [ -c "$USB_SINK" ]; then
-		# -huffman default: the optimal-table pass costs a second walk over
-		# every frame for a few percent of size; not worth it on this CPU.
-		# nobuffer/low_delay: ffmpeg otherwise queues input to probe it and
-		# smooth timing, a frame or more of latency for nothing on a live
-		# source whose format is already known.
-		# RTP/JPEG (RFC 2435) carries no Huffman tables and expects the
-		# standard ones, which -huffman default guarantees; and it carries
-		# the quantisation tables in-band as a luma+chroma pair. ffmpeg
-		# writes only one when both are equal, and a receiver that takes
-		# the pair literally then decodes chroma with garbage: that was the
-		# scrambled picture on the first working stream. 4:2:0 because it
-		# is RTP/JPEG type 1, the one every receiver handles, and the
-		# thermal image has no chroma detail to lose.
-		ffmpeg -nostdin -hide_banner -loglevel warning \
-			-fflags nobuffer -flags low_delay \
-			-f v4l2 -input_format "$USB_INPUT_FORMAT" \
-			-video_size "${USB_WIDTH}x${USB_HEIGHT}" -framerate "$USB_FPS" \
-			-i "$USB_SOURCE" \
-			-c:v mjpeg -q:v "$USB_JPEG_QUALITY" -huffman default \
-			-force_duplicated_matrix 1 -pix_fmt yuvj420p \
-			$USBTRANSCODE_EXTRA \
-			-f v4l2 "$USB_SINK" >"$LOG" 2>&1 &
-		ffmpeg_pid=$!
+		run_encoder >"$LOG" 2>&1 &
+		encoder_pid=$!
 		sleep 2
-		if kill -0 "$ffmpeg_pid" 2>/dev/null; then
+		if kill -0 "$encoder_pid" 2>/dev/null; then
 			"$RTSP_INIT" start >/dev/null 2>&1
-			wait "$ffmpeg_pid"
+			wait "$encoder_pid"
 			"$RTSP_INIT" stop >/dev/null 2>&1
 		else
-			wait "$ffmpeg_pid"
+			wait "$encoder_pid"
 		fi
 	fi
 	sleep 3

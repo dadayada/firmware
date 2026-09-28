@@ -1,0 +1,20 @@
+config BR2_PACKAGE_USBMJPEG
+	bool "usbmjpeg"
+	depends on !BR2_PACKAGE_LIBJPEG_OPENIPC
+	select BR2_PACKAGE_JPEG
+	help
+	  Reads raw YUYV frames from a V4L2 capture device, JPEG-encodes
+	  them with libjpeg and writes the frames into a v4l2loopback
+	  output node, so v4l2rtspserver can serve a camera that offers
+	  no compressed format of its own. One small C program, no
+	  scaling or filtering; with libjpeg-turbo (the jpeg variant
+	  buildroot picks on any NEON-capable ARM) the encode runs on
+	  SIMD, which is the point: ffmpeg's MJPEG encoder has no NEON
+	  DCT and took a whole Cortex-A7 core for a 384x288 thermal
+	  camera.
+
+	  Source lives in this package under src/. Usage and defaults:
+	  usbmjpeg -h
+
+comment "usbmjpeg conflicts with libjpeg-openipc (both install libjpeg)"
+	depends on BR2_PACKAGE_LIBJPEG_OPENIPC

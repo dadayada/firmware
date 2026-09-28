@@ -22,6 +22,7 @@ stop() {
 	# The supervisor first, so it does not restart the encoder it is about
 	# to lose; then the encoder itself.
 	start-stop-daemon -K -q -x "$DAEMON_PATH"
+	start-stop-daemon -K -q -x /usr/bin/usbmjpeg
 	start-stop-daemon -K -q -x /usr/bin/ffmpeg
 	echo "OK"
 }

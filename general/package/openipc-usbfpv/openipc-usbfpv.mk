@@ -13,7 +13,7 @@ OPENIPC_USBFPV_SITE_METHOD = local
 OPENIPC_USBFPV_SITE = $(BR2_EXTERNAL_GENERAL_PATH)/package/openipc-usbfpv
 OPENIPC_USBFPV_LICENSE = MIT
 
-OPENIPC_USBFPV_DEPENDENCIES = divinus msposd v4l2rtspserver ffmpeg-openipc v4l2loopback-openipc
+OPENIPC_USBFPV_DEPENDENCIES = divinus msposd v4l2rtspserver usbmjpeg ffmpeg-openipc v4l2loopback-openipc
 
 # Nothing here may share a path with another package's install. With
 # per-package directories the final tree is assembled in alphabetical package
