@@ -10,6 +10,14 @@
 # and fps across mp4 and mjpeg whether the channel is enabled or not
 # (src/media.c), so an idle mjpeg block left at upstream's 3840x2160 put the
 # IMX415 into a 4K mode and capped the sensor stream at 20fps (2026-09-28).
+#
+# isp.exposure caps the auto-exposure shutter time in microseconds (added by
+# general/package/divinus/0001-*.patch). Without it the tuning file lets AE
+# stretch the shutter in dim light and the sensor follows it down to ~10fps
+# whatever mp4.fps asks for; 16000 fits inside a 60fps frame and trades
+# low-light brightness for a steady rate. 0002-*.patch makes divinus take the
+# 1920x1080 sensor mode for 1080p@60 instead of the 2560x1440 one, which the
+# ISP cannot sustain at 60fps and halves to 30 (2026-09-29).
 system:
   sensor_config: /etc/sensors/imx415.bin
   web_port: 80
@@ -28,6 +36,7 @@ isp:
   mirror: false
   flip: false
   antiflicker: 60
+  exposure: 16000
 
 osd:
   enable: false
@@ -95,7 +104,7 @@ mp4:
   mode: CBR
   width: 1920
   height: 1080
-  fps: 30
+  fps: 60
   gop: 30
   bitrate: 4096
   profile: 2
@@ -111,5 +120,5 @@ mjpeg:
   mode: CBR
   width: 1920
   height: 1080
-  fps: 30
+  fps: 60
   bitrate: 1024
