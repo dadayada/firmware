@@ -1,0 +1,69 @@
+From 1149f31278abc34a8ecb88dd4516d61fd7ef7e0d Mon Sep 17 00:00:00 2001
+From: Bohdan <nasushnyi@gmail.com>
+Date: Tue, 29 Sep 2026 19:00:43 +0300
+Subject: [PATCH 2/2] i6: pick the smallest sensor mode that covers the request
+
+The mode loop took the first mode that fits, and sensor drivers list
+their largest mode first. On IMX415, 1080p@60 got the 2560x1440@60 mode:
+a 2952x1656 crop at 60fps is more than the SSC338Q ISP sustains
+("ISP P0 FIFO FULL", "ISP drop list Full") and it delivered 30fps.
+Choosing the smallest fitting crop gives the 1920x1080 mode at 60fps.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/hal/star/i6_hal.c | 21 +++++++++++++++------
+ 1 file changed, 15 insertions(+), 6 deletions(-)
+
+diff --git a/src/hal/star/i6_hal.c b/src/hal/star/i6_hal.c
+index 1c48fd0..a6933b7 100644
+--- a/src/hal/star/i6_hal.c
++++ b/src/hal/star/i6_hal.c
+@@ -2,6 +2,8 @@
+ 
+ #include "i6_hal.h"
+ 
++#include <limits.h>
++
+ i6_aud_impl  i6_aud;
+ i6_isp_impl  i6_isp;
+ i6_rgn_impl  i6_rgn;
+@@ -228,6 +230,10 @@ int i6_pipeline_create(char index, short width, short height, char mirror, char
+ 
+         if (ret = i6_snr.fnGetResolutionCount(_i6_snr_index, &count))
+             return ret;
++        // Take the smallest mode that covers the request, not the first:
++        // drivers list their largest mode first, and a larger crop at the
++        // same rate costs ISP bandwidth for pixels that get scaled away.
++        unsigned int area = UINT_MAX;
+         for (char i = 0; i < count; i++) {
+             if (ret = i6_snr.fnGetResolution(_i6_snr_index, i, &resolution))
+                 return ret;
+@@ -237,16 +243,19 @@ int i6_pipeline_create(char index, short width, short height, char mirror, char
+                 framerate > resolution.maxFps)
+                 continue;
+ 
++            if (resolution.crop.width * resolution.crop.height >= area)
++                continue;
++            area = resolution.crop.width * resolution.crop.height;
+             _i6_snr_profile = i;
+-            if (ret = i6_snr.fnSetResolution(_i6_snr_index, _i6_snr_profile))
+-                return ret;
+-            _i6_snr_framerate = framerate;
+-            if (ret = i6_snr.fnSetFramerate(_i6_snr_index, _i6_snr_framerate))
+-                return ret;
+-            break;
+         }
+         if (_i6_snr_profile < 0)
+             return EXIT_FAILURE;
++
++        if (ret = i6_snr.fnSetResolution(_i6_snr_index, _i6_snr_profile))
++            return ret;
++        _i6_snr_framerate = framerate;
++        if (ret = i6_snr.fnSetFramerate(_i6_snr_index, _i6_snr_framerate))
++            return ret;
+     }
+ 
+     if (ret = i6_snr.fnSetOrientation(_i6_snr_index, mirror, flip))
+-- 
+2.50.1 (Apple Git-155)
+

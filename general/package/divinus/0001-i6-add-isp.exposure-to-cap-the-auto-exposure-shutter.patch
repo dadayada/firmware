@@ -1,0 +1,90 @@
+From 5603e36afbb2150d7d6bfebb8e9229002bff9bc9 Mon Sep 17 00:00:00 2001
+From: Bohdan <nasushnyi@gmail.com>
+Date: Tue, 29 Sep 2026 15:17:39 +0300
+Subject: [PATCH 1/2] i6: add isp.exposure to cap the auto-exposure shutter
+ time
+
+On infinity6 the ISP tuning file can let auto-exposure stretch the
+shutter past the frame period, and the sensor then drops its frame rate
+to fit: an IMX415 configured for 1080p@90 ran at 10-20fps indoors.
+i6_sensor_exposure() already wraps MI_ISP_AE_SetExposureLimit but had no
+caller. Call it right after the tuning file is loaded, because loading
+it resets the limits; the same call from another process has no effect.
+
+isp.exposure is the maximum shutter time in microseconds, 0 (the
+default) leaves the tuning file's limit alone. With 10000 the same scene
+went from 20fps to 90fps.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/app_config.c |  3 +++
+ src/app_config.h |  1 +
+ src/media.c      | 12 +++++++++++-
+ 3 files changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/src/app_config.c b/src/app_config.c
+index ed82877..239c3a4 100644
+--- a/src/app_config.c
++++ b/src/app_config.c
+@@ -109,6 +109,7 @@ int app_config_save(void) {
+     fprintf(file, "  mirror: %s\n", app_config.mirror ? "true" : "false");
+     fprintf(file, "  flip: %s\n", app_config.flip ? "true" : "false");
+     fprintf(file, "  antiflicker: %d\n", app_config.antiflicker);
++    fprintf(file, "  exposure: %d\n", app_config.exposure);
+ 
+     fprintf(file, "mdns:\n");
+     fprintf(file, "  enable: %s\n", app_config.mdns_enable ? "true" : "false");
+@@ -270,6 +271,7 @@ enum ConfigError app_config_parse(void) {
+     app_config.mirror = false;
+     app_config.flip = false;
+     app_config.antiflicker = 0;
++    app_config.exposure = 0;
+ 
+     app_config.night_mode_enable = false;
+     app_config.ir_sensor_pin = 999;
+@@ -377,6 +379,7 @@ enum ConfigError app_config_parse(void) {
+     if (err != CONFIG_OK)
+         goto RET_ERR;
+     parse_int(&ini, "isp", "antiflicker", -1, 60, &app_config.antiflicker);
++    parse_int(&ini, "isp", "exposure", 0, 1000000, &app_config.exposure);
+ 
+     parse_bool(&ini, "mdns", "enable", &app_config.mdns_enable);
+ 
+diff --git a/src/app_config.h b/src/app_config.h
+index 029e0d4..4245070 100644
+--- a/src/app_config.h
++++ b/src/app_config.h
+@@ -41,6 +41,7 @@ struct AppConfig {
+     bool mirror;
+     bool flip;
+     int antiflicker;
++    int exposure;
+ 
+     // [osd]
+     bool osd_enable;
+diff --git a/src/media.c b/src/media.c
+index e9cb510..b23d743 100644
+--- a/src/media.c
++++ b/src/media.c
+@@ -959,7 +959,17 @@ int sdk_start(void) {
+         switch (plat) {
+ #if defined(__ARM_PCS_VFP)
+             case HAL_PLATFORM_I3:  i3_config_load(app_config.sensor_config); break;
+-            case HAL_PLATFORM_I6:  i6_config_load(app_config.sensor_config); break;
++            case HAL_PLATFORM_I6:
++                i6_config_load(app_config.sensor_config);
++                if (app_config.exposure) {
++                    int ret = i6_sensor_exposure(app_config.exposure);
++                    if (ret)
++                        HAL_WARNING("media", "Capping the exposure at %dus failed with %#x!\n",
++                            app_config.exposure, ret);
++                    else
++                        HAL_INFO("media", "Exposure capped at %dus\n", app_config.exposure);
++                }
++                break;
+             case HAL_PLATFORM_I6C: i6c_config_load(app_config.sensor_config); break;
+             case HAL_PLATFORM_M6:  m6_config_load(app_config.sensor_config); break;
+ #elif defined(__mips__)
+-- 
+2.50.1 (Apple Git-155)
+
