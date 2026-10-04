@@ -4,7 +4,3 @@
 # uvcvideo binds the USB camera the moment it enumerates, so /dev/video0 is
 # there whether it was plugged in at power-on or later.
 uvcvideo
-# One loopback node at a fixed number, so nothing races the USB camera for
-# /dev/video0. exclusive_caps=1 makes it look like a plain capture device to
-# v4l2rtspserver once ffmpeg is writing into it.
-v4l2loopback devices=1 video_nr=10 card_label=usb-mjpeg exclusive_caps=1
