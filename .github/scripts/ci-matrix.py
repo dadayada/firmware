@@ -277,7 +277,7 @@ UNBUILT_FAMILIES = {
 NOT_BUILT = {
     "adaptive-link", "aic8800-openipc", "allwinner-osdrv-v83x", "atbm-wifi",
     "aura-httpd", "baresip-openipc", "comgt", "f2fs-tools-openipc", "faceter-agent",
-    "faceter-detector", "fdk-aac-openipc", "ffmpeg-openipc", "gdbserver-lite",
+    "faceter-detector", "fdk-aac-openipc", "ffmpeg-openipc", "fpvcam", "gdbserver-lite",
     "go2rtc", "herald", "hisi-gpio", "hisilicon-osdrv-hi3536dv100", "i2c-telemetry",
     "jsonfilter", "libhv-openipc", "libre-openipc", "libsrt-openipc",
     "linux-patcher", "matter",

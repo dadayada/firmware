@@ -1,0 +1,30 @@
+config BR2_PACKAGE_FPVCAM
+	bool "fpvcam"
+	depends on BR2_PACKAGE_SIGMASTAR_OSDRV_INFINITY6E
+	depends on !BR2_PACKAGE_MAJESTIC
+	depends on !BR2_PACKAGE_LIBJPEG_OPENIPC
+	select BR2_PACKAGE_JPEG
+	help
+	  A streamer for an FPV board with a MIPI sensor on a SigmaStar
+	  infinity6e SoC and an optional UVC camera. One RTSP server
+	  with two paths, /main for the sensor (H.264 or H.265) and /usb
+	  for the UVC camera (H.264 or H.265 through a second channel of
+	  the SoC's encoder, or MJPEG on the CPU), and a web page on
+	  which every setting -- sensor mode, resolution, frame rate,
+	  exposure, white balance, picture, bitrate -- is saved to
+	  /etc/fpvcam.conf and applied the moment it is changed.
+
+	  The source lives in this package under src/. It is built
+	  against the SigmaStar MI headers, which are not in this tree;
+	  they are fetched from https://github.com/openipc/research
+	  (star/include/infinity6e) at the commit fpvcam.mk pins, and
+	  linked against the MI libraries sigmastar-osdrv-infinity6e
+	  installs. Those are only installed on a majestic-free image,
+	  and two streamers cannot share one sensor, hence the
+	  dependency.
+
+comment "fpvcam needs sigmastar-osdrv-infinity6e and a majestic-free image"
+	depends on !BR2_PACKAGE_SIGMASTAR_OSDRV_INFINITY6E || BR2_PACKAGE_MAJESTIC
+
+comment "fpvcam conflicts with libjpeg-openipc (both install libjpeg)"
+	depends on BR2_PACKAGE_LIBJPEG_OPENIPC

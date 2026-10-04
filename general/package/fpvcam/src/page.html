@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fpvcam</title>
+<style>
+:root { color-scheme: light dark; --line: #8884; --dim: #888; --ok: #2a8a4a; --bad: #c0392b; }
+* { box-sizing: border-box; }
+body { font: 14px/1.4 system-ui, sans-serif; margin: 0 auto; padding: 12px; max-width: 980px; }
+h1 { font-size: 18px; margin: 0 0 10px; }
+h2 { font-size: 14px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
+section { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; }
+#groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+#groups section { margin: 0; }
+.row { display: grid; grid-template-columns: 1fr 120px; gap: 8px; align-items: center; padding: 3px 0; }
+.row small { grid-column: 1 / -1; color: var(--dim); margin-top: -2px; }
+input, select { width: 100%; font: inherit; padding: 3px 5px; }
+input[type=checkbox] { width: auto; justify-self: start; }
+.saved { outline: 2px solid var(--ok); }
+.failed { outline: 2px solid var(--bad); }
+#status { font-variant-numeric: tabular-nums; white-space: pre-wrap; margin: 0; font: inherit; }
+#msg { min-height: 1.4em; color: var(--dim); }
+#msg.bad, .err { color: var(--bad); }
+button { font: inherit; padding: 4px 10px; }
+code { user-select: all; }
+</style>
+</head>
+<body>
+<h1>fpvcam</h1>
+<section><h2>Status</h2><pre id="status">loading…</pre></section>
+<p id="msg"></p>
+<div id="groups"></div>
+<p><button id="defaults">Restore all defaults</button></p>
+<script>
+var $ = function (id) { return document.getElementById(id); };
+var modes = [], inputs = {};
+
+function say(text, bad) { $('msg').textContent = text; $('msg').className = bad ? 'bad' : ''; }
+
+function flash(el, cls) {
+	el.classList.remove('saved', 'failed');
+	el.classList.add(cls);
+	setTimeout(function () { el.classList.remove(cls); }, 1500);
+}
+
+// Every change is sent on its own the moment the field is left: there is no
+// Save button because there is nothing that is applied but not saved.
+function send(s, el) {
+	var value = el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value;
+	fetch('/api/set', { method: 'POST', body: encodeURIComponent(s.key) + '=' + encodeURIComponent(value) })
+		.then(function (r) { return r.json(); })
+		.then(function (r) {
+			if (!r.ok) {
+				// The camera kept the old value; so does the field.
+				flash(el, 'failed');
+				say(s.label + ': ' + r.errors[s.key], true);
+				if (el.type === 'checkbox') el.checked = el.dataset.value === '1'; else el.value = el.dataset.value;
+				return;
+			}
+			el.dataset.value = value;
+			if (!r.saved) {
+				flash(el, 'failed');
+				say(s.label + ' is applied but could not be written to flash; it will be lost on reboot.', true);
+			} else {
+				flash(el, 'saved');
+				say(s.label + ' saved' + (r.restarts ? ' — restarting the ' + r.restarts +
+					(r.restarts === 'server' ? '' : ', the stream drops for a moment') : '') + '.');
+			}
+		})
+		.catch(function () { flash(el, 'failed'); say('The camera did not answer.', true); });
+}
+
+function control(s) {
+	var el;
+	if (s.type === 'enum' || s.key === 'sensor_mode') {
+		el = document.createElement('select');
+		(s.opts || '').split(',').forEach(function (o) { if (o) el.add(new Option(o, o)); });
+	} else {
+		el = document.createElement('input');
+		if (s.type === 'bool') el.type = 'checkbox';
+		else if (s.type === 'int') { el.type = 'number'; el.min = s.min; el.max = s.max; }
+	}
+	if (s.type === 'bool') el.checked = s.value === '1'; else el.value = s.value;
+	el.dataset.value = s.value;
+	el.addEventListener('change', function () { send(s, el); });
+	inputs[s.key] = el;
+	return el;
+}
+
+function fillModes() {
+	var el = inputs.sensor_mode, want;
+	if (!el || el.options.length === modes.length + 1) return;
+	want = el.dataset.value;
+	el.options.length = 0;
+	el.add(new Option('auto', '-1'));
+	modes.forEach(function (m, i) {
+		el.add(new Option(i + ': ' + m.w + 'x' + m.h + ' up to ' + m.max_fps + ' fps', String(i)));
+	});
+	el.value = want;
+}
+
+function build(cfg) {
+	var groups = {};
+	cfg.settings.forEach(function (s) {
+		var box = groups[s.group], row, label, hint;
+		if (!box) {
+			box = groups[s.group] = document.createElement('section');
+			box.innerHTML = '<h2></h2>';
+			box.firstChild.textContent = s.group;
+			$('groups').appendChild(box);
+		}
+		row = document.createElement('label');
+		row.className = 'row';
+		label = document.createElement('span');
+		label.textContent = s.label;
+		row.appendChild(label);
+		row.appendChild(control(s));
+		if (s.hint) {
+			hint = document.createElement('small');
+			hint.textContent = s.hint;
+			row.appendChild(hint);
+		}
+		box.appendChild(row);
+	});
+	fillModes();
+}
+
+function x(gain) { return (gain / 1024).toFixed(2) + 'x'; }
+
+function status() {
+	fetch('/api/status').then(function (r) { return r.json(); }).then(function (st) {
+		var s = st.sensor, u = st.usb, host = location.hostname, lines = [];
+		var port = st.rtsp_port === 554 ? '' : ':' + st.rtsp_port;
+		modes = s.modes || [];
+		fillModes();
+		lines.push('Sensor  ' + (s.name || 'not running') + '  mode ' + s.mode + '  ' + s.width + 'x' + s.height +
+			'  ' + s.out_fps + ' fps  ' + s.kbps + ' kbit/s  viewers ' + s.clients);
+		if (s.error) lines.push('        ' + s.error);
+		if (s.ae) lines.push('        shutter ' + s.ae.shutter_us + ' us  sensor gain ' + x(s.ae.sensor_gain) +
+			'  digital gain ' + x(s.ae.isp_gain) + (s.ae.stable ? '' : '  (settling)'));
+		if (s.awb) lines.push('        white balance R ' + s.awb.r + '  G ' + s.awb.g + '  B ' + s.awb.b +
+			'  ' + s.awb.kelvin + ' K');
+		lines.push('        rtsp://' + host + port + '/main');
+		lines.push('USB     ' + u.state + (u.width ? '  ' + u.width + 'x' + u.height + '  ' + u.encoder : '') +
+			'  ' + u.out_fps + ' fps  ' + u.kbps + ' kbit/s  viewers ' + u.clients);
+		if (u.error) lines.push('        ' + u.error);
+		lines.push('        rtsp://' + host + port + '/usb');
+		$('status').textContent = lines.join('\n');
+	}).catch(function () { $('status').textContent = 'The camera is not answering.'; });
+}
+
+$('defaults').addEventListener('click', function () {
+	if (!confirm('Put every setting back to its default? Both streams restart.')) return;
+	fetch('/api/defaults', { method: 'POST' }).then(function () { location.reload(); });
+});
+
+fetch('/api/config').then(function (r) { return r.json(); }).then(build)
+	.catch(function () { say('Could not load the settings.', true); });
+status();
+setInterval(status, 2000);
+</script>
+</body>
+</html>

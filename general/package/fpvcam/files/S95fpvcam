@@ -1,0 +1,58 @@
+#!/bin/sh
+
+DAEMON="fpvcam"
+DAEMON_PATH="/usr/bin/$DAEMON"
+
+# S70vendor has loaded the SigmaStar modules and the sensor driver by now,
+# and S35modules the UVC driver. fpvcam finds the sensor's tuning file by the
+# driver's own name and keeps its settings in /etc/fpvcam.conf, so there is
+# nothing to prepare here. Its messages go to syslog: logread | grep fpvcam
+
+running() {
+	start-stop-daemon -t -K -q -x "$DAEMON_PATH"
+}
+
+start() {
+	echo -n "Starting $DAEMON: "
+	start-stop-daemon -b -S -q -x "$DAEMON_PATH"
+	case $? in
+		0) echo "OK" ;;
+		1) echo "OK (already running)" ;;
+		*) echo "FAIL"; return 1 ;;
+	esac
+}
+
+# fpvcam takes the encoder channels and the sensor down before it exits, and
+# disarms the watchdog last. Killing it early would leave the watchdog
+# counting towards a reboot, so it is given time.
+stop() {
+	echo -n "Stopping $DAEMON: "
+	start-stop-daemon -K -q -x "$DAEMON_PATH"
+	i=0
+	while running && [ $i -lt 10 ]; do
+		i=$((i + 1))
+		sleep 1
+	done
+	if running; then
+		echo "FAIL"
+		return 1
+	fi
+	echo "OK"
+}
+
+case "$1" in
+	start|stop)
+		$1
+		;;
+
+	restart)
+		stop || exit 1
+		sleep 1
+		start
+		;;
+
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+esac
