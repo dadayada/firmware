@@ -339,8 +339,8 @@ static int session(const struct config *cfg)
 	struct pollfd pfd[2];
 	struct enc_params p;
 	uint64_t last_frame;
-	unsigned int dev = 0, inject_failed = 0;
-	int hw, venc_up = 0, nfds = 1, wait = 2000;
+	unsigned int dev = 0, inject_failed = 0, frames = 0;
+	int hw, venc_up = 0, nfds = 1, wait = 2000, kicked = 0;
 
 	memset(&jpg, 0, sizeof(jpg));
 	if (open_capture(&cap, cfg))
@@ -417,6 +417,30 @@ static int session(const struct config *cfg)
 			break;
 		}
 		if (r <= 0 || !(pfd[0].revents & POLLIN)) {
+			/* The InfiRay thermal core (3474:43d1) answers every
+			 * second stream start with silence. Measured on it,
+			 * 2026-10-04: a start that follows a session which
+			 * delivered frames gets none, however long the camera
+			 * was left closed in between (1 to 6 s tried), and the
+			 * start after that one works, even 0.4 s later. So a
+			 * start that brings nothing is simply made again, once;
+			 * the encoder channel stays as it is. */
+			if (!frames && !kicked && now_ms() - last_frame > 1500) {
+				int w = cap.width, h = cap.height;
+
+				kicked = 1;
+				close_capture(&cap);
+				if (open_capture(&cap, cfg))
+					break;
+				if (cap.width != w || cap.height != h) {
+					wait = 0;
+					break;
+				}
+				pfd[0].fd = cap.fd;
+				pfd[0].revents = 0;
+				last_frame = now_ms();
+				continue;
+			}
 			/* A UVC camera that stops delivering has usually been
 			 * unplugged; its node lingers a moment after. */
 			if (now_ms() - last_frame > 5000) {
@@ -437,6 +461,7 @@ static int session(const struct config *cfg)
 			break;
 		}
 		last_frame = now_ms();
+		frames++;
 		if (b.index < NBUF && cap.maps[b.index] && !(b.flags & V4L2_BUF_FLAG_ERROR)) {
 			const uint8_t *frame = cap.maps[b.index];
 			size_t raw = (size_t)cap.width * (size_t)cap.height * 2;

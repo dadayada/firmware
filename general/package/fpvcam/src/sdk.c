@@ -264,18 +264,35 @@ static unsigned int mode_h(const MI_SNR_Res_t *m)
 }
 
 /*
+ * Pixels per second a mode pushes into the ISP. Asking the sensor for a
+ * lower frame rate does not lower it: the driver only lengthens the blanking
+ * between frames, the lines still arrive as fast.
+ */
+static uint64_t mode_rate(const MI_SNR_Res_t *m)
+{
+	return (uint64_t)m->stCropRect.u16Width * m->stCropRect.u16Height * m->u32MaxFps;
+}
+
+/* The fastest mode seen working on an SSC338Q: the IMX415 at 3840x2160@30. */
+#define ISP_RATE_MAX ((uint64_t)3840 * 2160 * 30)
+
+/*
  * The smallest mode that covers the request, not the first one: drivers list
- * their largest mode first, and on the IMX415 the first fit for 1080p60 is a
- * 2952x1656 crop the SSC338Q ISP cannot sustain at 60fps -- it delivered 30
- * ("ISP P0 FIFO FULL", 2026-09-29). If nothing covers the size, the frame
- * rate wins and the largest mode that reaches it is used, the picture then
- * being that mode's size; if nothing reaches the frame rate
- * either, the fastest mode is the least wrong answer.
+ * their largest mode first. If nothing covers the size, the frame rate wins
+ * and the largest mode that reaches it is used, the picture then being that
+ * mode's size; if nothing reaches the frame rate either, the fastest mode is
+ * the least wrong answer.
+ *
+ * A mode the ISP cannot keep up with is never picked here. The IMX415's
+ * "2560x1440@60" reads out 2952x1656 at 60fps, more than its 4K30 mode, and
+ * on an SSC338Q the ISP overflows ("ISP P0 FIFO FULL"): Divinus got 30fps out
+ * of it (2026-09-29), this pipeline none at all at 30, 45, 50 or 60fps
+ * (2026-10-04). It can still be chosen by number.
  */
 static int pick_mode(const struct config *c)
 {
 	unsigned int i, best_area = ~0u, big_area = 0;
-	int fit = -1, big = -1, fastest = 0;
+	int fit = -1, big = -1, fastest = -1;
 
 	if (c->sensor_mode >= 0 && (unsigned int)c->sensor_mode < S.mode_count)
 		return c->sensor_mode;
@@ -283,7 +300,9 @@ static int pick_mode(const struct config *c)
 		const MI_SNR_Res_t *m = &S.modes[i];
 		unsigned int area = mode_w(m) * mode_h(m);
 
-		if (m->u32MaxFps > S.modes[fastest].u32MaxFps)
+		if (mode_rate(m) > ISP_RATE_MAX)
+			continue;
+		if (fastest < 0 || m->u32MaxFps > S.modes[fastest].u32MaxFps)
 			fastest = (int)i;
 		if ((unsigned int)c->fps > m->u32MaxFps)
 			continue;
@@ -297,7 +316,7 @@ static int pick_mode(const struct config *c)
 			best_area = area;
 		}
 	}
-	return fit >= 0 ? fit : big >= 0 ? big : fastest;
+	return fit >= 0 ? fit : big >= 0 ? big : fastest >= 0 ? fastest : 0;
 }
 
 static void bind_port(MI_SYS_ChnPort_t *p, MI_ModuleId_e mod, unsigned int dev)
@@ -898,7 +917,8 @@ void *sensor_thread(void *arg)
 		 * than left dark until someone notices. */
 		if (now_ms() - S.last_frame > 5000) {
 			LOGE("sensor: no frames for 5 seconds, restarting the pipeline");
-			rebuild(1, "the sensor stopped delivering frames and was restarted");
+			rebuild(1, "no frames from the sensor, so it is being restarted; "
+				   "if this stays, choose another sensor mode");
 		}
 	}
 

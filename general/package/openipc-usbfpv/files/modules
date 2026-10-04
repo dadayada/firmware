@@ -1,6 +1,0 @@
-# Loaded by S35modules, before mdev runs at S38. Kept out of the shared
-# overlay because these modules exist only in this profile's kernel.
-#
-# uvcvideo binds the USB camera the moment it enumerates, so /dev/video0 is
-# there whether it was plugged in at power-on or later.
-uvcvideo

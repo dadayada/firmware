@@ -107,10 +107,10 @@ static const struct setting settings[] = {
 	  T_INT, 16, 1920, NULL, "384", A_USB, OFF(usb_width) },
 	{ "usb_height", "USB camera", "Height", NULL, T_INT, 16, 1080, NULL, "288", A_USB, OFF(usb_height) },
 	{ "usb_fps", "USB camera", "Frame rate", NULL, T_INT, 1, 120, NULL, "25", A_USB, OFF(usb_fps) },
-	/* mjpeg until the hardware path has been seen working on a board: it is
-	 * the one that is known to. */
+	/* The hardware path was seen working on an SSC338Q with the InfiRay
+	 * core on 2026-10-04: 384x288 at 30fps in both H.264 and H.265. */
 	{ "usb_codec", "USB camera", "Codec", "h264 and h265 use the hardware encoder, mjpeg encodes on the CPU",
-	  T_ENUM, 0, 2, "h264,h265,mjpeg", "mjpeg", A_USB, OFF(usb_codec) },
+	  T_ENUM, 0, 2, "h264,h265,mjpeg", "h264", A_USB, OFF(usb_codec) },
 	{ "usb_bitrate", "USB camera", "Bitrate (kbit/s)", "h264 and h265 only",
 	  T_INT, 64, 20000, NULL, "1024", A_USB, OFF(usb_bitrate) },
 	{ "usb_gop", "USB camera", "Keyframe interval (frames)", "h264 and h265 only",

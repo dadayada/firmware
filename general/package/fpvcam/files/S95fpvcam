@@ -3,16 +3,23 @@
 DAEMON="fpvcam"
 DAEMON_PATH="/usr/bin/$DAEMON"
 
-# S70vendor has loaded the SigmaStar modules and the sensor driver by now,
-# and S35modules the UVC driver. fpvcam finds the sensor's tuning file by the
-# driver's own name and keeps its settings in /etc/fpvcam.conf, so there is
-# nothing to prepare here. Its messages go to syslog: logread | grep fpvcam
+# S70vendor has loaded the SigmaStar modules and the sensor driver by now.
+# fpvcam finds the sensor's tuning file by the driver's own name and keeps
+# its settings in /etc/fpvcam.conf. Its messages go to syslog:
+# logread | grep fpvcam
+#
+# The UVC driver is loaded here because nothing else does it: /etc/modules
+# comes from the shared overlay, which lands after every package, so a list
+# a package installs there never reaches the image. The first fpvcam image
+# booted without the driver and had no USB camera. A kernel built without
+# the module just has no USB stream.
 
 running() {
 	start-stop-daemon -t -K -q -x "$DAEMON_PATH"
 }
 
 start() {
+	modprobe -q uvcvideo
 	echo -n "Starting $DAEMON: "
 	start-stop-daemon -b -S -q -x "$DAEMON_PATH"
 	case $? in
