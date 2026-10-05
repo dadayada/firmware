@@ -12,7 +12,7 @@
 SRC := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 O ?= $(SRC)build
 
-OBJS := main.o config.o sdk.o usb.o rtsp.o http.o page.o
+OBJS := main.o config.o sdk.o usb.o night.o rtsp.o http.o page.o
 MI_LIBS := -lmi_isp -lmi_sensor -lmi_sys -lmi_venc -lmi_vif -lmi_vpe \
 	-lcus3a -lispalgo -lcam_os_wrapper
 

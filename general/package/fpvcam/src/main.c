@@ -151,6 +151,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	watchdog_set(c.watchdog);
+	night_apply(&c);
 	/* The servers come up before the pipelines: if the sensor cannot
 	 * start, the page that says why and lets it be fixed is reachable. */
 	if (rtsp_start() || http_start() ||
@@ -162,12 +163,19 @@ int main(int argc, char **argv)
 	}
 
 	while (!g_quit) {
-		if (__sync_fetch_and_and(&main_pending, 0) & A_WDT) {
+		int flags = __sync_fetch_and_and(&main_pending, 0), i;
+
+		if (flags) {
 			config_get(&c);
-			watchdog_set(c.watchdog);
+			if (flags & A_WDT)
+				watchdog_set(c.watchdog);
+			if (flags & A_NIGHT)
+				night_apply(&c);
 		}
 		watchdog_feed();
-		sleep(1);
+		/* In tenths, so a click on the page moves the filter at once. */
+		for (i = 0; i < 10 && !g_quit && !main_pending; i++)
+			usleep(100000);
 	}
 
 	LOGI("stopping");

@@ -1,0 +1,12 @@
+# What fpvcam starts from on this profile's board, where that differs from
+# the defaults compiled into it. Same key=value lines as /etc/fpvcam.conf,
+# which is read after this file and wins; "Restore all defaults" on the
+# settings page comes back to these.
+#
+# The day/night filter's two drive pads, PAD_SAR_GPIO1 and PAD_SAR_GPIO0.
+# Found on the board on 2026-10-05: 24 high with 23 low for 300 ms put the
+# filter in front of the sensor and the violet daylight picture turned
+# neutral; 23 high with 24 low took it away again. The OpenIPC wiki's GPIO
+# table lists the same pair for Anjoy's SSC30KQ and SSC338Q boards.
+ircut_pin_day=24
+ircut_pin_night=23

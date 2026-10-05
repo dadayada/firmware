@@ -24,6 +24,9 @@
 #include <syslog.h>
 
 #define CONFIG_PATH "/etc/fpvcam.conf"
+/* What the board's image wants different from the defaults compiled in here:
+ * pad numbers, mostly. Optional, never written by fpvcam. */
+#define BOARD_DEFAULTS_PATH "/etc/fpvcam.defaults"
 
 enum { STREAM_MAIN, STREAM_USB, STREAM_COUNT };
 enum { CODEC_H264, CODEC_H265, CODEC_MJPEG };
@@ -37,6 +40,7 @@ enum { RC_CBR, RC_VBR, RC_AVBR };
 #define A_RTSP  0x10	/* the RTSP listener is reopened */
 #define A_HTTP  0x20	/* the web listener is reopened */
 #define A_WDT   0x40	/* the watchdog timeout is reprogrammed */
+#define A_NIGHT 0x80	/* the day/night filter is moved */
 
 struct config {
 	/* sensor pipeline */
@@ -48,6 +52,8 @@ struct config {
 	int shutter_us, sensor_gain, ev_comp, antiflicker;
 	/* white balance */
 	int awb_mode, wb_r_gain, wb_g_gain, wb_b_gain;
+	/* day/night */
+	int night_mode, night_grayscale, ircut_pin_day, ircut_pin_night;
 	/* sensor encoder */
 	int codec, rc_mode, bitrate, gop, profile, min_qp, max_qp;
 	/* usb camera */
@@ -67,13 +73,17 @@ uint64_t now_ms(void);
 extern volatile int g_quit;
 void main_request(int flags);
 
+/* night.c */
+void night_apply(const struct config *c);
+
 /* config.c */
 void config_defaults(struct config *c);
 void config_load(const char *path);
 int config_save(void);
 void config_get(struct config *out);
 /* Sets one key. Returns the A_* flags the change needs, or -1 with a reason. */
-int config_set(const char *key, const char *value, char *err, size_t errlen);
+/* keep = 0 applies the value without it ever reaching the settings file. */
+int config_set(const char *key, const char *value, char *err, size_t errlen, int keep);
 int config_reset(void);
 size_t config_json(char *buf, size_t len);
 const char *codec_name(int codec);

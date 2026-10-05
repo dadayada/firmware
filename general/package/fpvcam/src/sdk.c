@@ -735,7 +735,7 @@ static void isp_apply(void)
 		CALL(MI_ISP_IQ_SetSharpness, 0, &sh);
 
 	memset(&gray, 0, sizeof(gray));
-	gray.bEnable = c->grayscale ? SS_TRUE : SS_FALSE;
+	gray.bEnable = c->grayscale || (c->night_mode && c->night_grayscale) ? SS_TRUE : SS_FALSE;
 	CALL(MI_ISP_IQ_SetColorToGray, 0, &gray);
 
 	/* A shutter longer than the frame period makes the sensor drop its

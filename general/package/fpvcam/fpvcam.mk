@@ -33,3 +33,11 @@ define FPVCAM_INSTALL_TARGET_CMDS
 endef
 
 $(eval $(generic-package))
+
+# The program is built from this directory, not from what is downloaded, so
+# the version above does not move when it changes and buildroot would keep
+# the binary it already has: the second image built from this tree shipped
+# the first one's fpvcam and init script, fixes and all left behind. Hanging
+# the sources on the build stamp is the same thing pkg-generic does to chain
+# its own stamps; a newer file reruns the build and, through it, the install.
+$(FPVCAM_TARGET_BUILD): $(wildcard $(FPVCAM_PKGDIR)/src/*) $(FPVCAM_PKGDIR)/files/S95fpvcam

@@ -96,8 +96,20 @@ static void dispatch(int flags)
 		rtsp_request_restart();
 	if (flags & A_HTTP)
 		http_request_restart();
-	if (flags & A_WDT)
-		main_request(A_WDT);
+	if (flags & (A_WDT | A_NIGHT))
+		main_request(flags & (A_WDT | A_NIGHT));
+}
+
+/* save=0 anywhere in the request covers every pair in it, whatever the
+ * order, so it has to be known before the first one is stored. */
+static int wants_save(const char *args)
+{
+	const char *p;
+
+	for (p = args; p; p = strchr(p, '&') ? strchr(p, '&') + 1 : NULL)
+		if (!strncmp(p, "save=0", 6) && (p[6] == '&' || p[6] == '\0'))
+			return 0;
+	return 1;
 }
 
 /*
@@ -111,7 +123,7 @@ static void api_set(int fd, char *args)
 {
 	char out[2048], err[96];
 	struct sbuf b = { out, 0, sizeof(out) };
-	int flags = 0, errors = 0, saved = 1, keep = 1;
+	int flags = 0, errors = 0, saved = 1, keep = wants_save(args);
 	char *pair, *save = NULL;
 
 	sb_printf(&b, "{\"errors\":{");
@@ -124,11 +136,9 @@ static void api_set(int fd, char *args)
 		*value++ = '\0';
 		url_decode(pair);
 		url_decode(value);
-		if (!strcmp(pair, "save")) {
-			keep = strcmp(value, "0") != 0;
+		if (!strcmp(pair, "save"))
 			continue;
-		}
-		r = config_set(pair, value, err, sizeof(err));
+		r = config_set(pair, value, err, sizeof(err), keep);
 		if (r < 0) {
 			sb_printf(&b, "%s", errors++ ? "," : "");
 			sb_json_str(&b, pair);

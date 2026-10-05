@@ -100,6 +100,18 @@ static const struct setting settings[] = {
 	{ "max_qp", "Sensor stream", "Highest QP (vbr, avbr)", NULL,
 	  T_INT, 0, 51, NULL, "48", A_ENC, OFF(max_qp) },
 
+	{ "night_mode", "Day / night", "Mode",
+	  "night moves the infrared filter away from the sensor, for use in the dark",
+	  T_ENUM, 0, 1, "day,night", "day", A_NIGHT | A_ISP, OFF(night_mode) },
+	{ "night_grayscale", "Day / night", "Black and white at night",
+	  "without the filter the colours are wrong", T_BOOL, 0, 1, NULL, "1", A_ISP, OFF(night_grayscale) },
+	{ "ircut_pin_day", "Day / night", "Filter pin, day",
+	  "GPIO that moves the filter in front of the sensor; -1 if the board has no filter",
+	  T_INT, -1, 255, NULL, "-1", A_NIGHT, OFF(ircut_pin_day) },
+	{ "ircut_pin_night", "Day / night", "Filter pin, night",
+	  "GPIO that moves it away. A wrong number can take a pad the board needs for something else",
+	  T_INT, -1, 255, NULL, "-1", A_NIGHT, OFF(ircut_pin_night) },
+
 	{ "usb_enable", "USB camera", "Enabled", NULL, T_BOOL, 0, 1, NULL, "1", A_USB, OFF(usb_enable) },
 	{ "usb_device", "USB camera", "Device", NULL,
 	  T_STR, 0, 0, NULL, "/dev/video0", A_USB, OFF(usb_device) },
@@ -131,7 +143,12 @@ static const struct setting settings[] = {
 
 #define NSETTINGS (sizeof(settings) / sizeof(settings[0]))
 
-static struct config cfg;
+/* cfg is what the camera runs with. disk is what the file holds, or will
+ * after the next save. They differ only by settings applied with save=0, and
+ * keeping them apart is what stops a later save from writing those out too:
+ * with one copy, exposure and white-balance values tried on 2026-10-04
+ * reached /etc/fpvcam.conf with the next unrelated change. */
+static struct config cfg, disk;
 static char cfg_path[128] = CONFIG_PATH;
 static pthread_mutex_t cfg_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -225,6 +242,11 @@ static void format(const struct config *c, const struct setting *s, char *out, s
 		snprintf(out, len, "%d", *int_field((struct config *)c, s));
 }
 
+static void read_file(struct config *c, const char *path, const char *what);
+
+/* The values compiled in, then whatever the board's image says it wants
+ * different. "Restore all defaults" lands here too, so a reset keeps the
+ * pad numbers that are a fact about the board and not a preference. */
 void config_defaults(struct config *c)
 {
 	char err[64];
@@ -233,6 +255,7 @@ void config_defaults(struct config *c)
 	memset(c, 0, sizeof(*c));
 	for (i = 0; i < NSETTINGS; i++)
 		store(c, &settings[i], settings[i].def, err, sizeof(err));
+	read_file(c, BOARD_DEFAULTS_PATH, "board defaults");
 }
 
 static const struct setting *find(const char *key)
@@ -251,38 +274,44 @@ static const struct setting *find(const char *key)
  * program, because the camera has to come up with a picture so that the
  * setting can be corrected from the page.
  */
-void config_load(const char *path)
+static void read_file(struct config *c, const char *path, const char *what)
 {
 	char line[256], err[96];
-	FILE *f;
+	FILE *f = fopen(path, "r");
 
+	if (!f) {
+		if (errno != ENOENT)
+			LOGW("config: cannot read %s: %s", path, strerror(errno));
+		return;
+	}
+	while (fgets(line, sizeof(line), f)) {
+		const struct setting *s;
+		char *eq, *key = line + strspn(line, " \t");
+
+		key[strcspn(key, "\r\n")] = '\0';
+		if (!*key || *key == '#')
+			continue;
+		eq = strchr(key, '=');
+		if (!eq)
+			continue;
+		*eq++ = '\0';
+		s = find(key);
+		if (!s)
+			LOGW("config: unknown setting '%s' in the %s ignored", key, what);
+		else if (store(c, s, eq, err, sizeof(err)))
+			LOGW("config: %s=%s in the %s rejected (%s)", key, eq, what, err);
+	}
+	fclose(f);
+}
+
+void config_load(const char *path)
+{
 	pthread_mutex_lock(&cfg_lock);
 	/* Saves go back to the file the settings were read from. */
 	snprintf(cfg_path, sizeof(cfg_path), "%s", path);
 	config_defaults(&cfg);
-	f = fopen(path, "r");
-	if (f) {
-		while (fgets(line, sizeof(line), f)) {
-			const struct setting *s;
-			char *eq, *key = line + strspn(line, " \t");
-
-			key[strcspn(key, "\r\n")] = '\0';
-			if (!*key || *key == '#')
-				continue;
-			eq = strchr(key, '=');
-			if (!eq)
-				continue;
-			*eq++ = '\0';
-			s = find(key);
-			if (!s)
-				LOGW("config: unknown setting '%s' ignored", key);
-			else if (store(&cfg, s, eq, err, sizeof(err)))
-				LOGW("config: %s=%s rejected (%s), using %s", key, eq, err, s->def);
-		}
-		fclose(f);
-	} else if (errno != ENOENT) {
-		LOGW("config: cannot read %s: %s", path, strerror(errno));
-	}
+	read_file(&cfg, path, "settings file");
+	disk = cfg;
 	pthread_mutex_unlock(&cfg_lock);
 }
 
@@ -307,7 +336,7 @@ static int save_locked(const char *path)
 	fprintf(f, "# fpvcam settings. Written by the web page; edit by hand only while\n"
 		   "# fpvcam is stopped, or it will overwrite the file on the next change.\n");
 	for (i = 0; i < NSETTINGS; i++) {
-		format(&cfg, &settings[i], val, sizeof(val));
+		format(&disk, &settings[i], val, sizeof(val));
 		fprintf(f, "%s=%s\n", settings[i].key, val);
 	}
 	ok = !ferror(f) && !fflush(f) && !fsync(fileno(f));
@@ -337,7 +366,7 @@ void config_get(struct config *out)
 	pthread_mutex_unlock(&cfg_lock);
 }
 
-int config_set(const char *key, const char *value, char *err, size_t errlen)
+int config_set(const char *key, const char *value, char *err, size_t errlen, int keep)
 {
 	const struct setting *s = find(key);
 	char before[96], after[96];
@@ -353,6 +382,8 @@ int config_set(const char *key, const char *value, char *err, size_t errlen)
 		pthread_mutex_unlock(&cfg_lock);
 		return -1;
 	}
+	if (keep)
+		store(&disk, s, value, err, errlen);
 	format(&cfg, s, after, sizeof(after));
 	if (strcmp(before, after)) {
 		flags = s->apply;
@@ -366,9 +397,10 @@ int config_reset(void)
 {
 	pthread_mutex_lock(&cfg_lock);
 	config_defaults(&cfg);
+	disk = cfg;
 	pthread_mutex_unlock(&cfg_lock);
 	LOGI("config: every setting back to its default");
-	return A_ISP | A_PIPE | A_USB | A_RTSP | A_HTTP | A_WDT;
+	return A_ISP | A_PIPE | A_USB | A_RTSP | A_HTTP | A_WDT | A_NIGHT;
 }
 
 void sb_printf(struct sbuf *b, const char *fmt, ...)
